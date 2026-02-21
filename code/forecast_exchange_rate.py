@@ -1,99 +1,100 @@
-# ================================
-# SOUTH AFRICA EXCHANGE RATE FORECAST PROJECT
-# Phase 3: Trend Regression and Visualization
-# Author: Thato Mokgosi
-# ================================
-
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
+import numpy as np
 
-# ================================
-# STEP 1: LOAD DATA
-# ================================
+# ===============================
+# STEP 1: LOAD EXCEL DATA
+# ===============================
 
 file_path = "../data/South_Africa_Exchange_Rate.xlsx"
-
-# Load Excel file
 data = pd.read_excel(file_path)
 
-# Fix header problem (your data has header in row 1)
+# Fix column names using second row
 data.columns = data.iloc[1]
-data = data.drop([0,1]).reset_index(drop=True)
-
-# Convert years to numeric
-data = data.melt(id_vars=["Country Name"], var_name="Year", value_name="Exchange_Rate")
-
-# Convert to correct data types
-data["Year"] = pd.to_numeric(data["Year"])
-data["Exchange_Rate"] = pd.to_numeric(data["Exchange_Rate"])
+data = data.drop(index=[0, 1])  # remove metadata rows
+data.reset_index(drop=True, inplace=True)
 
 # Keep only South Africa
 data = data[data["Country Name"] == "South Africa"]
 
-print("FIRST ROWS OF CLEAN DATA:")
-print(data.head())
+# ===============================
+# STEP 2: CONVERT TO LONG FORMAT
+# ===============================
 
-# ================================
-# STEP 2: DESCRIPTIVE STATISTICS
-# ================================
+data_long = data.melt(
+    id_vars=["Country Name"],
+    var_name="Year",
+    value_name="Exchange_Rate"
+)
+
+# Convert Year and Exchange Rate to numbers
+data_long["Year"] = pd.to_numeric(data_long["Year"], errors="coerce")
+data_long["Exchange_Rate"] = pd.to_numeric(data_long["Exchange_Rate"], errors="coerce")
+
+# Remove missing values
+data_long = data_long.dropna()
+
+print("FIRST ROWS OF CLEAN DATA:")
+print(data_long.head())
+
+# ===============================
+# STEP 3: DESCRIPTIVE STATISTICS
+# ===============================
 
 print("\nDESCRIPTIVE STATISTICS")
-print(data["Exchange_Rate"].describe())
+print(data_long["Exchange_Rate"].describe())
 
-# ================================
-# STEP 3: TREND REGRESSION MODEL
-# ================================
+# ===============================
+# STEP 4: TREND REGRESSION
+# ===============================
 
-# Create time index variable t
-data["t"] = np.arange(len(data))
+# Create time index t
+data_long["t"] = np.arange(len(data_long))
 
 # Regression
-X = data[["t"]]
-y = data["Exchange_Rate"]
+coefficients = np.polyfit(data_long["t"], data_long["Exchange_Rate"], 1)
+trend = np.poly1d(coefficients)
+data_long["Trend"] = trend(data_long["t"])
 
-model = LinearRegression()
-model.fit(X, y)
-
-# Trend values
-data["Trend"] = model.predict(X)
-
-# Print regression equation
 print("\nTREND REGRESSION EQUATION:")
-print("Exchange Rate =", model.coef_[0], "* t +", model.intercept_)
+print(f"Exchange Rate = {coefficients[0]} * t + {coefficients[1]}")
 
-# ================================
-# STEP 4: PLOT ACTUAL VS TREND
-# ================================
+# ===============================
+# STEP 5: FORECAST NEXT 10 YEARS
+# ===============================
 
-plt.figure(figsize=(14,7))
+future_t = np.arange(len(data_long), len(data_long) + 10)
+future_years = np.arange(data_long["Year"].max() + 1, data_long["Year"].max() + 11)
+forecast_rates = trend(future_t)
 
-# Actual data
-plt.plot(data["Year"], data["Exchange_Rate"], label="Actual Exchange Rate", linewidth=2)
+forecast_df = pd.DataFrame({
+    "Year": future_years,
+    "Forecast_Exchange_Rate": forecast_rates
+})
 
-# Trend line
-plt.plot(data["Year"], data["Trend"], linestyle="--", linewidth=3, label="Trend Line")
+# ===============================
+# STEP 6: SAVE DATA FILES
+# ===============================
 
-# Graph settings
-plt.title("South Africa Exchange Rate Trend (1960–2024)")
+data_long.to_csv("../output/exchange_rate_clean.csv", index=False)
+forecast_df.to_csv("../output/exchange_rate_forecast.csv", index=False)
+
+# ===============================
+# STEP 7: GRAPH
+# ===============================
+
+plt.figure(figsize=(12,6))
+plt.plot(data_long["Year"], data_long["Exchange_Rate"], label="Actual Exchange Rate")
+plt.plot(data_long["Year"], data_long["Trend"], linestyle="--", label="Trend Line")
+plt.plot(future_years, forecast_rates, linestyle=":", label="Forecast")
+
 plt.xlabel("Year")
-plt.ylabel("Exchange Rate (ZAR per USD)")
+plt.ylabel("ZAR per USD")
+plt.title("South Africa Exchange Rate Trend and Forecast")
 plt.legend()
-plt.grid(True)
-
-# Optional zoom (remove if you want full scale)
-plt.ylim(0, 20)
+plt.grid()
 
 # Save graph
-plt.savefig("../output/exchange_rate_trend.png")
-
-# Show graph
+plt.savefig("../output/exchange_rate_forecast.png")
 plt.show()
 
-# ================================
-# STEP 5: SAVE CLEAN DATA FOR REPORT
-# ================================
-
-data.to_csv("../output/clean_exchange_rate_data.csv", index=False)
-print("\nClean dataset saved to output folder.")
